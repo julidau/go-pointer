@@ -9,25 +9,21 @@ import (
 
 var (
 	mutex sync.RWMutex
-	store = map[unsafe.Pointer]interface{}{}
+	store = map[uintptr]interface{}{}
+	count = uintptr(1) // start count at 1, since 0 is NULL and therefore special
 )
 
-func Save(v interface{}) unsafe.Pointer {
+func Save(v interface{}) (ptr unsafe.Pointer) {
 	if v == nil {
 		return nil
 	}
 
-	// Generate real fake C pointer.
+	// Generate fake C pointer.
 	// This pointer will not store any data, but will bi used for indexing purposes.
-	// Since Go doest allow to cast dangling pointer to unsafe.Pointer, we do rally allocate one byte.
-	// Why we need indexing, because Go doest allow C code to store pointers to Go data.
-	var ptr unsafe.Pointer = C.malloc(C.size_t(1))
-	if ptr == nil {
-		panic("can't allocate 'cgo-pointer hack index pointer': ptr == nil")
-	}
-
 	mutex.Lock()
-	store[ptr] = v
+	ptr = unsafe.Pointer(count)
+	store[count] = v
+	count++
 	mutex.Unlock()
 
 	return ptr
@@ -39,7 +35,7 @@ func Restore(ptr unsafe.Pointer) (v interface{}) {
 	}
 
 	mutex.RLock()
-	v = store[ptr]
+	v = store[uintptr(ptr)]
 	mutex.RUnlock()
 	return
 }
@@ -50,8 +46,6 @@ func Unref(ptr unsafe.Pointer) {
 	}
 
 	mutex.Lock()
-	delete(store, ptr)
+	delete(store, uintptr(ptr))
 	mutex.Unlock()
-
-	C.free(ptr)
 }
